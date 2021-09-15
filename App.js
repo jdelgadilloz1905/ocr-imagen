@@ -10,9 +10,14 @@ import {
 	StyleSheet,
 	FlatList,
 	Text,
+	TouchableWithoutFeedback,
+	Alert,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import { GOOGLE_CLOUD_VISION_API_KEY } from './config/environment'
+import {
+	GOOGLE_CLOUD_VISION_API_KEY,
+	API_URL_LICENCE,
+} from './config/environment'
 
 export default function ImagePickerExample() {
 	const [image, setImage] = useState(null)
@@ -41,7 +46,7 @@ export default function ImagePickerExample() {
 			quality: 1,
 		})
 
-		console.log(result)
+		//console.log(result)
 
 		if (!result.cancelled) {
 			setImage(result.uri)
@@ -55,16 +60,55 @@ export default function ImagePickerExample() {
 			quality: 1,
 		})
 
-		console.log(result)
+		//console.log(result)
 
 		if (!result.cancelled) {
 			setImage(result.uri)
 		}
 	}
 
+	const uploadImage = async () => {
+		try {
+			if (!image) {
+				return
+			}
+			setUploading(true)
+			const formData = new FormData()
+			let uriPart_archivo = image.split('.')
+			let fileExtension_archivo = uriPart_archivo[uriPart_archivo.length - 1]
+
+			formData.append('imagen', {
+				uri: image,
+				name: `photo.${fileExtension_archivo}`,
+				type: `image/${fileExtension_archivo}`,
+			})
+
+			let response = await fetch(
+				`${API_URL_LICENCE}/api/products/upload-image`,
+				{
+					headers: {
+						'Content-Type': 'multipart/form-data',
+					},
+					method: 'POST',
+					body: formData,
+				}
+			)
+			let responseJson = await response.json()
+
+			if (responseJson.statusCode === 200) {
+				submitToGoogle(responseJson.imageInfo[0].file)
+			} else {
+				Alert.alert('Error guardando la imagen')
+			}
+			setUploading(false)
+		} catch (error) {
+			console.log(error)
+		}
+	}
+
 	const maybeRenderImage = () => {
 		if (!image) {
-			return
+			//return
 		}
 
 		return (
@@ -76,8 +120,24 @@ export default function ImagePickerExample() {
 				}}>
 				<Button
 					style={{ marginBottom: 10 }}
-					onPress={submitToGoogle}
+					onPress={takePhoto}
+					title='Toma una foto'
+				/>
+				<Button
+					style={{ marginBottom: 10 }}
+					title='Elija una imagen'
+					onPress={pickImage}
+				/>
+				<Button
+					style={{ marginBottom: 10 }}
+					onPress={uploadImage}
 					title='Analizar'
+				/>
+
+				<Button
+					style={{ marginBottom: 10 }}
+					onPress={removePhoto}
+					title='Limpiar foto '
 				/>
 
 				<View
@@ -93,9 +153,8 @@ export default function ImagePickerExample() {
 		)
 	}
 
-	const submitToGoogle = async () => {
+	const submitToGoogle = async (url) => {
 		try {
-			console.log('envio la foto a google vision ')
 			setUploading(true)
 
 			let body = JSON.stringify({
@@ -115,8 +174,7 @@ export default function ImagePickerExample() {
 						],
 						image: {
 							source: {
-								imageUri:
-									'https://www.visa.co.ve/dam/VCOM/regional/lac/SPA/Default/Pay%20With%20Visa/Tarjetas/visa-classic-400x225.jpg',
+								imageUri: `${API_URL_LICENCE}/${url}`,
 							},
 						},
 					},
@@ -135,11 +193,10 @@ export default function ImagePickerExample() {
 				}
 			)
 			let responseJson = await response.json()
-			console.info('mi resultado es ')
+
 			//console.log(responseJson.responses)
 			setGoogleResponse(responseJson)
 			setUploading(false)
-			console.log('  final ')
 		} catch (error) {
 			console.error(error)
 		}
@@ -168,15 +225,20 @@ export default function ImagePickerExample() {
 		setGoogleResponse(null)
 	}
 
-	const renderItem = (item) => {
+	/*const renderItem = (item) => {
 		;<Text>response: {JSON.stringify(item)}</Text>
-	}
+	}*/
+
+	const renderItem = ({ item }) => (
+		<TouchableWithoutFeedback key={item}>
+			<View>
+				<Text>Item: {item.description}</Text>
+			</View>
+		</TouchableWithoutFeedback>
+	)
 
 	return (
 		<View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-			<Button onPress={takePhoto} title='Toma una foto' />
-			<Button title='Elija una imagen' onPress={pickImage} />
-
 			{image && (
 				<Image source={{ uri: image }} style={{ width: 200, height: 200 }} />
 			)}
@@ -184,12 +246,11 @@ export default function ImagePickerExample() {
 			{maybeRenderImage()}
 			{maybeRenderUploadingOverlay()}
 
-			<Button onPress={removePhoto} title='Limpiar foto ' />
 			{googleResponse && (
 				<FlatList
 					data={googleResponse.responses[0].textAnnotations}
-					keyExtractor={(item, index) => item.id}
-					renderItem={({ item }) => <Text>Item: {item.description}</Text>}
+					keyExtractor={(item) => item.id}
+					renderItem={renderItem}
 				/>
 			)}
 		</View>
